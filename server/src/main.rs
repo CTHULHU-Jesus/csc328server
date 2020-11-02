@@ -60,13 +60,17 @@ fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message 
                 Message::CHAT(format!("{}:{}",nick,message))
                 .to_string()
                 .as_bytes()
-            ).unwrap();
+            ).unwrap_or(0);
         }
     };
     // @TODO add timestamp to log output
-    File::open(log_file_name)
+    let log = format!("{}\t{}:`{}`\n",Utc::now(),nick,message);
+    print!("{}",log);
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(log_file_name)
         .unwrap_or(File::create(log_file_name).unwrap())
-        .write(format!("{}\t{}:`{}`",Utc::now(),nick,message).as_bytes()).unwrap();
+        .write(log.as_bytes()).unwrap();
 }
 
 /// Gets a valid nickname from the user 
