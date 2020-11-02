@@ -89,3 +89,4 @@ pub fn test_message() -> () {
     println!("test CHAT from_str '{}' -> '{}'", chat_str, Message::from_str(chat_str).unwrap().to_string());
  
 }
+

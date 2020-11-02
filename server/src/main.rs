@@ -4,8 +4,11 @@ use std::sync::*;
 use crate::lib::*;
 use std::io::{Read,Write};
 use std::time::Duration;
+use std::fs::File;
+use std::path::Path;
+use chrono::Utc;
 
-/// Dissconnects from all active connections and the ends
+/// Dissconnects from all active connections, waits 5 seconds and then ends
 /// conns : The active connections
 fn disconnect_all_connections(conns : Vec<TcpStream>) {
     const TIMEOUT_TIMER : Duration = Duration::from_secs(5);
@@ -29,7 +32,7 @@ fn remove_connection(conns : &mut Vec<TcpStream>, to_remove : &TcpStream) {
     *conns = conns
         .into_iter()
         .filter(|x| x.peer_addr().unwrap() != peer)
-        .map(|x| x.try_clone().unwrap()).collect::<Vec<TcpStream>>();
+        .map(|x| x.try_clone().unwrap()).collect::<Vec<_>>();
 }
 
 /// Removes a nickname from the list of active nicknames
@@ -50,6 +53,7 @@ fn remove_nickname(nicknames : &mut Vec<String>, to_remove : &String) {
 /// nick  : The nickname of the user sending the message.
 /// message : The message being sent.
 fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message : &String) -> () {
+    let log_file_name : &Path = Path::new("logfile.txt");
     for mut connection in conns {
         if connection.peer_addr().unwrap() != *me {
             connection.write(
@@ -58,7 +62,11 @@ fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message 
                 .as_bytes()
             ).unwrap();
         }
-    }
+    };
+    // @TODO add timestamp to log output
+    File::open(log_file_name)
+        .unwrap_or(File::create(log_file_name).unwrap())
+        .write(format!("{}\t{}:`{}`",Utc::now(),nick,message).as_bytes()).unwrap();
 }
 
 /// Gets a valid nickname from the user 
@@ -107,7 +115,7 @@ fn main() {
     // start listening for connections
     const USAGE : &str = "cargo run [port number]";
     const MESSAGE_MAX_SIZE : usize = 4000;
-    let portnumber = std::env::args().nth(1).expect(USAGE).parse::<u32>().expect(USAGE); //1337,8008,42069
+    let portnumber = std::env::args().nth(1).unwrap_or("1337".to_string()).parse::<u32>().expect(USAGE); //1337,8008,42069
     let listener = TcpListener::bind(format!("0.0.0.0:{}",portnumber)).expect("Could not bind to desired port number");
     let connections : Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
     let nicknames : Arc<Mutex<Vec<String>>>   = Arc::new(Mutex::new(Vec::new()));
@@ -115,7 +123,7 @@ fn main() {
     {
         let connections = connections.clone();
         ctrlc::set_handler( move || {
-            disconnect_all_connections(connections.lock().unwrap().iter().map( |x| x.try_clone().unwrap() ).collect());
+            disconnect_all_connections((*connections.lock().unwrap()).iter().map( |x| x.try_clone().unwrap() ).collect());
             std::process::exit(0);
         }).expect("Error seting Ctrl-C handler");
     }
@@ -165,6 +173,7 @@ fn main() {
                     }
                 },
                 // On Error do nothing but loop back
+                // @TODO decide whether or not to just exit from the program
                 Err(_) => true,
             } {
                 // clears buffer
