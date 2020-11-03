@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 const MSG_SIZE: usize = 1024;
-const USAGE : &str = "cargo run [server ip:portnumber]";
+const USAGE : &str = "Usage: cargo run [server ip:portnumber]";
 
 fn main() {
     let ip = std::env::args().nth(1).expect(USAGE);

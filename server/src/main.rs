@@ -8,6 +8,12 @@ use std::fs::File;
 use std::path::Path;
 use chrono::Utc;
 
+/// Removes all dead connections from a vector
+/// conns : The list of active connections
+fn remove_dead_connections(conns : &mut Vec<TcpStream>) {
+
+}
+
 /// Dissconnects from all active connections, waits 5 seconds and then ends
 /// conns : The active connections
 fn disconnect_all_connections(conns : Vec<TcpStream>) {
@@ -18,7 +24,7 @@ fn disconnect_all_connections(conns : Vec<TcpStream>) {
         let conn = Box::new(conn);
         std::thread::spawn( move || {
             //@TODO tell client to shutdown
-            conn.shutdown(Shutdown::Both).unwrap();
+            conn.shutdown(Shutdown::Both).unwrap_or(std::process::exit(0));
         });
     };
     std::thread::sleep(TIMEOUT_TIMER);
