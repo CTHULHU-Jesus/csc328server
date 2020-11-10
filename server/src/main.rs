@@ -150,7 +150,7 @@ fn main() {
             // Send HELLO Message 
             stream.write(&Message::HELLO.to_string().as_bytes()).unwrap();
 
-            // Handel Nick Message
+            // Handle Nick Message
             let nick : String = match get_nickname(&mut stream,&nicknames) {
                 Some(s) => s,
                 None    => {
