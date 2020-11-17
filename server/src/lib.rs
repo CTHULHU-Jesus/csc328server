@@ -11,6 +11,7 @@ use chrono::Utc;
 use std::path::Path;
 extern crate libc;
 use libc::*;
+use std::convert::TryInto;
 
 #[derive(Clone,PartialEq,Eq)]
 pub enum Message {
@@ -141,13 +142,25 @@ pub fn rcv_message(stream : &mut TcpStream, msg : &mut Message) {
         if getInfo(msg_info, buf.cast::<c_char>()) == -1 {println!("Error interpreting message!");}
         unsafe { //I sure do love dealing with pointers :S
             let info : messageInfo = *msg_info;
+            let mut name : [u8; 32];
+            let mut mesg : [u8; 1024];
+            let mut i = 0;
+            for n in info.name.iter() {
+                name[i] = *n as u8;
+                i = i+1;
+            }
+            i = 0;
+            for m in info.msg.iter() {
+                mesg[i] = *m as u8;
+                i = i+1;
+            }
             msg = match info.protocol {
                 0 => &mut Message::HELLO,
                 1 => &mut Message::BYE,
-                2 => &mut Message::NICK(from_utf8(info.name).expect("Error: Bad nickname string!").trim_end().to_string() ),
+                2 => &mut Message::NICK(from_utf8(&name).expect("Error: Bad nickname string!").trim_end().to_string() ),
                 3 => &mut Message::READY,
                 4 => &mut Message::RETRY,
-                5 => &mut Message::CHAT(from_utf8(info.msg).expect("Error: Bad nickname string!").trim_end().to_string() ),
+                5 => &mut Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() ),
             }
         }
     }
