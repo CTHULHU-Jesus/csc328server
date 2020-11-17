@@ -84,8 +84,8 @@ impl ToString for Message {
 #[repr(C)]
 struct messageInfo {
     protocol : c_int,
-    name : [c_char; NAME_MAX_SIZE],
-    msg : [c_char; MESSAGE_MAX_SIZE],
+    name : [c_uchar; NAME_MAX_SIZE],
+    msg : [c_uchar; MESSAGE_MAX_SIZE],
     size : c_int,
     msg_size : c_int,
     name_size : c_int,
@@ -172,25 +172,13 @@ pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
             None
         } else {
             if getInfo(msg_info, buf.cast::<c_char>()) == -1 {return None}
-            let mut name : [u8; NAME_MAX_SIZE] = [0;NAME_MAX_SIZE];
-            let mut mesg : [u8; MESSAGE_MAX_SIZE] = [0; MESSAGE_MAX_SIZE];
-            let mut i = 0;
-            for n in msg_info.name.iter() {
-                name[i] = *n as u8;
-                i = i+1;
-            }
-            i = 0;
-            for m in msg_info.msg.iter() {
-                mesg[i] = *m as u8;
-                i = i+1;
-            }
             match msg_info.protocol {
                 0 => Some(Message::HELLO),
                 1 => Some(Message::BYE),
-                2 => Some(Message::NICK(from_utf8(&name).expect("Error: Bad nickname string!").trim_end().to_string() )),
+                2 => Some(Message::NICK(from_utf8(&msg_info.name).ok()?.trim_end().to_string())),
                 3 => Some(Message::READY),
                 4 => Some(Message::RETRY),
-                5 => Some(Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() )),
+                5 => Some(Message::CHAT(from_utf8(&msg_info.msg).ok()?.trim_end().to_string())),
                 _ => None,
             }
         }
