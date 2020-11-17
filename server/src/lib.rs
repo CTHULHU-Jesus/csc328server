@@ -75,6 +75,7 @@ impl ToString for Message {
 // Library Bindings
 
 // This is a reproduction of messageInfo in the library
+#[derive(Clone,PartialEq,Eq)]
 #[repr(C)]
 struct messageInfo {
     protocol : c_int,
@@ -84,6 +85,16 @@ struct messageInfo {
     msg_size : c_int,
     name_size : c_int,
 } 
+// This is initial state for messageInfo types because we have to initialize them before we pass them
+const MESSAGEINFOINIT : messageInfo =
+    messageInfo{
+    protocol : 0,
+    name : [0;32],
+    msg : [0;1024],
+    size : 0,
+    msg_size : 0,
+    name_size : 0,
+};
 // here's the actual bindings to library functions
 #[link(name = "libcs", kind = "static")]
 extern "C" {
@@ -100,6 +111,9 @@ extern "C" {
                buffer : *mut c_char) -> c_int;
 }
 // and now functions to make them easier to use
+/// Sends a message to a client
+/// stream: The stream to send a message to
+/// msg: The message to send
 pub fn send_message(stream : &mut TcpStream, msg : Message) {
     let proto : c_int;
     let mut string : Option<String> = None;
@@ -118,50 +132,58 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) {
     let mut message : *mut c_char;
     let mut message_size : c_int;
     match string {
-        Some(s) => {message = s.as_mut_str().as_mut_ptr() as *mut i8;
+        Some(s) => {message = s.clone().as_mut_str().as_mut_ptr() as *mut i8;
                     message_size = s.len() as c_int;}
         None    => {message = 0 as *mut i8;
                     message_size = 0;}
     }
-    if name {// Sending a nickname
-        if sendMessage(stream.as_raw_fd(), proto, message, 0 as *mut i8, message_size, 0) == -1 {
-            println!("Error occured sending the message!");
-        }
-    } else {// Sending anything other than a nickname
-        if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
-            println!("Error occured sending the message!");
+    unsafe {
+        if name {// Sending a nickname
+            if sendMessage(stream.as_raw_fd(), proto, message, 0 as *mut i8, message_size, 0) == -1 {
+                println!("Error occured sending the message!");
+            }
+        } else {// Sending anything other than a nickname
+            if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
+                println!("Error occured sending the message!");
+            }
         }
     }
 }
-pub fn rcv_message(stream : &mut TcpStream, msg : &mut Message) {
-    let mut buf : *mut c_void;
-    let mut msg_info : *mut messageInfo;
-    let bytes_read = receiveMessage(stream.as_raw_fd(), buf, 1024 as c_int); 
-    if bytes_read == -1 {
-        println!("Error receiving message!");
-    } else {
-        if getInfo(msg_info, buf.cast::<c_char>()) == -1 {println!("Error interpreting message!");}
-        unsafe { //I sure do love dealing with pointers :S
-            let info : messageInfo = *msg_info;
-            let mut name : [u8; 32];
-            let mut mesg : [u8; 1024];
-            let mut i = 0;
-            for n in info.name.iter() {
-                name[i] = *n as u8;
-                i = i+1;
-            }
-            i = 0;
-            for m in info.msg.iter() {
-                mesg[i] = *m as u8;
-                i = i+1;
-            }
-            msg = match info.protocol {
-                0 => &mut Message::HELLO,
-                1 => &mut Message::BYE,
-                2 => &mut Message::NICK(from_utf8(&name).expect("Error: Bad nickname string!").trim_end().to_string() ),
-                3 => &mut Message::READY,
-                4 => &mut Message::RETRY,
-                5 => &mut Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() ),
+
+/// receves a message
+/// stream: the stream to receve from
+/// returns the message reveved
+pub fn rcv_message(stream : &mut TcpStream) -> Message {
+    unsafe {
+        let mut buf : *mut c_void = &mut [0u8;1024] as *mut _ as *mut c_void;
+        let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
+        let bytes_read = receiveMessage(stream.as_raw_fd(), buf, 1024 as c_int); 
+        if bytes_read == -1 {
+            panic!("Error receiving message!");
+        } else {
+            if getInfo(msg_info, buf.cast::<c_char>()) == -1 {println!("Error interpreting message!");}
+            unsafe { //I sure do love dealing with pointers :S
+                let mut name : [u8; 32] = [0;32];
+                let mut mesg : [u8; 1024] = [0; 1024];
+                let mut i = 0;
+                for n in msg_info.name.iter() {
+                    name[i] = *n as u8;
+                    i = i+1;
+                }
+                i = 0;
+                for m in msg_info.msg.iter() {
+                    mesg[i] = *m as u8;
+                    i = i+1;
+                }
+                match msg_info.protocol {
+                    0 => Message::HELLO,
+                    1 => Message::BYE,
+                    2 => Message::NICK(from_utf8(&name).expect("Error: Bad nickname string!").trim_end().to_string() ),
+                    3 => Message::READY,
+                    4 => Message::RETRY,
+                    5 => Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() ),
+                    x => None.expect(format!("Error:{} is not a valid message code.",x).as_mut_str()),
+                }
             }
         }
     }
