@@ -12,6 +12,7 @@ use std::path::Path;
 extern crate libc;
 use libc::*;
 use std::convert::TryInto;
+use std::os::unix::io::AsRawFd;
 
 #[derive(Clone,PartialEq,Eq)]
 pub enum Message {
