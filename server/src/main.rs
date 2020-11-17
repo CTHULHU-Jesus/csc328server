@@ -2,7 +2,6 @@ mod lib;
 use std::net::*;
 use std::sync::*;
 use crate::lib::*;
-use std::io::{Read,Write};
 use std::time::Duration;
 
 
@@ -55,7 +54,8 @@ fn main() {
             (*connections.lock().unwrap()).push(stream.try_clone().unwrap());
 
             // Send HELLO Message 
-            stream.write(&Message::HELLO.to_string().as_bytes()).unwrap();
+            send_message(&mut stream,Message::HELLO);
+            // stream.write(&Message::HELLO.to_string().as_bytes()).unwrap();
             log(&format!("Start connection with {}",conn_name));
 
             // Handle Nick Message
@@ -69,37 +69,50 @@ fn main() {
                 }
             };
             log(&format!("{} has the nickname `{}`",conn_name,nick));
-
+            
             // Wait for messages
-            let mut message = [0u8;MESSAGE_MAX_SIZE];
-            while match stream.read(&mut message) {
-                Ok(size) => {
-                    let message : Message =
-                        std::str::FromStr::from_str(
-                        std::str::from_utf8(&message[0..size])
-                        .unwrap_or(""))
-                        .unwrap_or(Message::BYE);
-                    match message {
-                        // On CHAT blast it out to all connected users
-                        Message::CHAT(x) => {
-                            blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
-                            log(&format!("{}@{}:`{}`",nick,conn_name,x));
-                            true
-                        }
-                        // on BYE exit loop
-                        Message::BYE => false,
-                        // Do not process any other messages, but do loop back
-                        _ => true,
-                    }
-                },
-                // On Error do nothing but loop back
-                // @TODO decide whether or not to just exit from the program
-                Err(_) => true,
-            } {
-                // clears buffer
-                message = [0;MESSAGE_MAX_SIZE];
-            };
-
+            while match rcv_message(&mut stream) {
+                // On CHAT blast it out to all connected users
+                Message::CHAT(x) => {
+                    blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
+                    log(&format!("{}@{}:`{}`",nick,conn_name,x));
+                    true
+                }
+                // on BYE exit loop
+                Message::BYE => false,
+                // Do not process any other messages, but do loop back
+                _ => true,
+      
+            } {}
+//            let mut message = [0u8;MESSAGE_MAX_SIZE];
+//            while match stream.read(&mut message) {
+//                Ok(size) => {
+//                    let message : Message =
+//                        std::str::FromStr::from_str(
+//                        std::str::from_utf8(&message[0..size])
+//                        .unwrap_or(""))
+//                        .unwrap_or(Message::BYE);
+//                    match message {
+//                        // On CHAT blast it out to all connected users
+//                        Message::CHAT(x) => {
+//                            blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
+//                            log(&format!("{}@{}:`{}`",nick,conn_name,x));
+//                            true
+//                        }
+//                        // on BYE exit loop
+//                        Message::BYE => false,
+//                        // Do not process any other messages, but do loop back
+//                        _ => true,
+//                    }
+//                },
+//                // On Error do nothing but loop back
+//                // @TODO decide whether or not to just exit from the program
+//                Err(_) => true,
+//            } {
+//                // clears buffer
+//                message = [0;MESSAGE_MAX_SIZE];
+//            };
+//
             //End
             log(&format!("Ending connection with {}@{}",nick,conn_name));
             //remove nickname from list of nicknames in use nicknames

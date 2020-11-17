@@ -1,8 +1,9 @@
 [package]
-name = "client_server"
+name    = "client_server"
 version = "0.1.0"
 authors = ["CTHULHU-Jesus <endercreeper92@gmail.com>"]
 edition = "2018"
+# build   = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,4 +12,5 @@ regex = "1.4.1"
 lazy_static = "1.4"
 ctrlc = "3.1.7"
 chrono = "0.4.19"
-libc = "0.2.0"
+libc = "0.2"
+

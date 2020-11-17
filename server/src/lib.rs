@@ -6,12 +6,10 @@ use std::net::*;
 use std::sync::*;
 use std::io::{Read,Write};
 use std::time::Duration;
-use std::fs::File;
 use chrono::Utc;
 use std::path::Path;
 extern crate libc;
 use libc::*;
-use std::convert::TryInto;
 use std::os::unix::io::AsRawFd;
 
 #[derive(Clone,PartialEq,Eq)]
@@ -96,7 +94,7 @@ const MESSAGEINFOINIT : messageInfo =
     name_size : 0,
 };
 // here's the actual bindings to library functions
-#[link(name = "libcs", kind = "static")]
+#[link(name = "cs", kind = "static")]
 extern "C" {
     fn sendMessage(sockfd : c_int,
                    proto : c_int,
@@ -114,7 +112,8 @@ extern "C" {
 /// Sends a message to a client
 /// stream: The stream to send a message to
 /// msg: The message to send
-pub fn send_message(stream : &mut TcpStream, msg : Message) {
+/// returns () on success and None on failure
+pub fn send_message(stream : &mut TcpStream, msg : Message) Option<()> {
     let proto : c_int;
     let mut string : Option<String> = None;
     let mut name = false;
@@ -140,11 +139,11 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) {
     unsafe {
         if name {// Sending a nickname
             if sendMessage(stream.as_raw_fd(), proto, message, 0 as *mut i8, message_size, 0) == -1 {
-                println!("Error occured sending the message!");
-            }
+                None
+            } 
         } else {// Sending anything other than a nickname
             if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
-                println!("Error occured sending the message!");
+                None
             }
         }
     }
@@ -153,37 +152,35 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) {
 /// receves a message
 /// stream: the stream to receve from
 /// returns the message reveved
-pub fn rcv_message(stream : &mut TcpStream) -> Message {
+pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
     unsafe {
         let mut buf : *mut c_void = &mut [0u8;1024] as *mut _ as *mut c_void;
         let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
         let bytes_read = receiveMessage(stream.as_raw_fd(), buf, 1024 as c_int); 
         if bytes_read == -1 {
-            panic!("Error receiving message!");
+            None
         } else {
             if getInfo(msg_info, buf.cast::<c_char>()) == -1 {println!("Error interpreting message!");}
-            unsafe { //I sure do love dealing with pointers :S
-                let mut name : [u8; 32] = [0;32];
-                let mut mesg : [u8; 1024] = [0; 1024];
-                let mut i = 0;
-                for n in msg_info.name.iter() {
-                    name[i] = *n as u8;
-                    i = i+1;
-                }
-                i = 0;
-                for m in msg_info.msg.iter() {
-                    mesg[i] = *m as u8;
-                    i = i+1;
-                }
-                match msg_info.protocol {
-                    0 => Message::HELLO,
-                    1 => Message::BYE,
-                    2 => Message::NICK(from_utf8(&name).expect("Error: Bad nickname string!").trim_end().to_string() ),
-                    3 => Message::READY,
-                    4 => Message::RETRY,
-                    5 => Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() ),
-                    x => None.expect(format!("Error:{} is not a valid message code.",x).as_mut_str()),
-                }
+            let mut name : [u8; 32] = [0;32];
+            let mut mesg : [u8; 1024] = [0; 1024];
+            let mut i = 0;
+            for n in msg_info.name.iter() {
+                name[i] = *n as u8;
+                i = i+1;
+            }
+            i = 0;
+            for m in msg_info.msg.iter() {
+                mesg[i] = *m as u8;
+                i = i+1;
+            }
+            match msg_info.protocol {
+                0 => Some(Message::HELLO),
+                1 => Some(Message::BYE),
+                2 => Some(Message::NICK(from_utf8(&name).expect("Error: Bad nickname string!").trim_end().to_string() )),
+                3 => Some(Message::READY),
+                4 => Some(Message::RETRY),
+                5 => Some(Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() )),
+                x => None,
             }
         }
     }
@@ -248,13 +245,10 @@ pub fn remove_nickname(nicknames : &mut Vec<String>, to_remove : &String) {
 /// nick  : The nickname of the user sending the message.
 /// message : The message being sent.
 pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message : &String) -> () {
-    for mut connection in conns {
+    for connection in conns {
         if connection.peer_addr().unwrap_or(*me) != *me {
-            connection.write(
-                Message::CHAT(format!("{}:{}",nick,message))
-                .to_string()
-                .as_bytes()
-            ).unwrap_or(0);
+            let message = Message::CHAT(format!("{}:{}",nick,message));
+            send_message(&mut connection.try_clone().unwrap(),message);
         }
     };
 }
@@ -286,34 +280,26 @@ pub fn log(log_message : &String) {
 pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>>) -> Option<String> {
     const NAME_MAX_SIZE : usize = 32;
     let mut message = [0;NAME_MAX_SIZE];
-    while match stream.read(&mut message) {
-        Ok(size) => {
-            let message : Message =
-                std::str::FromStr::from_str(
-                std::str::from_utf8(
-                    &message[0..size]).ok()?
-                )
-                .unwrap();
-            match message {
-                Message::NICK(n) => {
+    while match rcv_message(stream) {
+                Some(Message::NICK(n)) => {
                     // if the nickname is not taken set add it to the list of nicknames in
                     // use and then return the nick
                     if !nicknames.lock().ok()?.contains(&n.clone()) {
                         nicknames.lock().ok()?.push(n.clone());
-                        stream.write(Message::READY.to_string().as_bytes()).ok()?;
+                        send_message(stream, Message::READY);
+                        // stream.write(Message::READY.to_string().as_bytes()).ok()?;
                         return Some(n);
                     } else {
                         // else ask the client to retry
-                        stream.write(Message::RETRY.to_string().as_bytes()).ok()?;
+                        // stream.write(Message::RETRY.to_string().as_bytes()).ok()?;
+                        send_message(stream, Message::RETRY);
                         true
                     }
                 }
-                Message::BYE => return None,
+                Some(Message::BYE) => return None,
+                None => return None,
                 _ => true,
-            }
-        },
-        Err(_) => return None
-    } {
+        } {
         message = [0;NAME_MAX_SIZE];
     };
     None
