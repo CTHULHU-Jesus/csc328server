@@ -4,7 +4,7 @@ use regex::Regex;
 use lazy_static::*;
 use std::net::*;
 use std::sync::*;
-use std::io::{Read,Write};
+use std::io::Write;
 use std::time::Duration;
 use chrono::Utc;
 use std::path::Path;
@@ -12,6 +12,13 @@ extern crate libc;
 use libc::*;
 use std::os::unix::io::AsRawFd;
 
+/// The Max size of message
+const MESSAGE_MAX_SIZE : usize = 1024;
+/// The Max size of a name
+const NAME_MAX_SIZE : usize = 32;
+
+
+/// The structure to describe Messages passed from client to server
 #[derive(Clone,PartialEq,Eq)]
 pub enum Message {
     HELLO,
@@ -77,8 +84,8 @@ impl ToString for Message {
 #[repr(C)]
 struct messageInfo {
     protocol : c_int,
-    name : [c_char; 32],
-    msg : [c_char; 1024],
+    name : [c_char; NAME_MAX_SIZE],
+    msg : [c_char; MESSAGE_MAX_SIZE],
     size : c_int,
     msg_size : c_int,
     name_size : c_int,
@@ -87,8 +94,8 @@ struct messageInfo {
 const MESSAGEINFOINIT : messageInfo =
     messageInfo{
     protocol : 0,
-    name : [0;32],
-    msg : [0;1024],
+    name : [0;NAME_MAX_SIZE],
+    msg : [0;MESSAGE_MAX_SIZE],
     size : 0,
     msg_size : 0,
     name_size : 0,
@@ -113,7 +120,7 @@ extern "C" {
 /// stream: The stream to send a message to
 /// msg: The message to send
 /// returns () on success and None on failure
-pub fn send_message(stream : &mut TcpStream, msg : Message) Option<()> {
+pub fn send_message(stream : &mut TcpStream, msg : Message) -> Option<()> {
     let proto : c_int;
     let mut string : Option<String> = None;
     let mut name = false;
@@ -128,8 +135,8 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) Option<()> {
         Message::CHAT(s) => {proto = 5;
                              string = Some(s);}
     }
-    let mut message : *mut c_char;
-    let mut message_size : c_int;
+    let message : *mut c_char;
+    let message_size : c_int;
     match string {
         Some(s) => {message = s.clone().as_mut_str().as_mut_ptr() as *mut i8;
                     message_size = s.len() as c_int;}
@@ -140,10 +147,14 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) Option<()> {
         if name {// Sending a nickname
             if sendMessage(stream.as_raw_fd(), proto, message, 0 as *mut i8, message_size, 0) == -1 {
                 None
-            } 
+            } else {
+                Some(())
+            }
         } else {// Sending anything other than a nickname
             if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
                 None
+            } else {
+                Some(())
             }
         }
     }
@@ -154,15 +165,15 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) Option<()> {
 /// returns the message reveved
 pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
     unsafe {
-        let mut buf : *mut c_void = &mut [0u8;1024] as *mut _ as *mut c_void;
+        let buf : *mut c_void = &mut [0u8;MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
         let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
-        let bytes_read = receiveMessage(stream.as_raw_fd(), buf, 1024 as c_int); 
+        let bytes_read = receiveMessage(stream.as_raw_fd(), buf, MESSAGE_MAX_SIZE as c_int); 
         if bytes_read == -1 {
             None
         } else {
-            if getInfo(msg_info, buf.cast::<c_char>()) == -1 {println!("Error interpreting message!");}
-            let mut name : [u8; 32] = [0;32];
-            let mut mesg : [u8; 1024] = [0; 1024];
+            if getInfo(msg_info, buf.cast::<c_char>()) == -1 {return None}
+            let mut name : [u8; NAME_MAX_SIZE] = [0;NAME_MAX_SIZE];
+            let mut mesg : [u8; MESSAGE_MAX_SIZE] = [0; MESSAGE_MAX_SIZE];
             let mut i = 0;
             for n in msg_info.name.iter() {
                 name[i] = *n as u8;
@@ -180,7 +191,7 @@ pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
                 3 => Some(Message::READY),
                 4 => Some(Message::RETRY),
                 5 => Some(Message::CHAT(from_utf8(&mesg).expect("Error: Bad nickname string!").trim_end().to_string() )),
-                x => None,
+                _ => None,
             }
         }
     }
@@ -278,8 +289,6 @@ pub fn log(log_message : &String) {
 /// nicknames : the global list of all nicknames
 /// returns : a valid nickname or None if the user wants to end the connection or an error occurred
 pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>>) -> Option<String> {
-    const NAME_MAX_SIZE : usize = 32;
-    let mut message = [0;NAME_MAX_SIZE];
     while match rcv_message(stream) {
                 Some(Message::NICK(n)) => {
                     // if the nickname is not taken set add it to the list of nicknames in
@@ -300,7 +309,6 @@ pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>
                 None => return None,
                 _ => true,
         } {
-        message = [0;NAME_MAX_SIZE];
     };
     None
 }

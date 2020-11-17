@@ -8,7 +8,6 @@ use std::time::Duration;
 fn main() {
     // start listening for connections
     const USAGE : &str = "cargo run [port number]";
-    const MESSAGE_MAX_SIZE : usize = 4000;
     let portnumber = std::env::args().nth(1).unwrap_or("1337".to_string()).parse::<u32>().expect(USAGE); //1337,8008,42069
     let listener = TcpListener::bind(format!("0.0.0.0:{}",portnumber)).expect("Could not bind to desired port number");
     let connections : Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
@@ -73,13 +72,15 @@ fn main() {
             // Wait for messages
             while match rcv_message(&mut stream) {
                 // On CHAT blast it out to all connected users
-                Message::CHAT(x) => {
+                Some(Message::CHAT(x)) => {
                     blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
                     log(&format!("{}@{}:`{}`",nick,conn_name,x));
                     true
                 }
                 // on BYE exit loop
-                Message::BYE => false,
+                Some(Message::BYE) => false,
+                // on Error exit loop
+                None => false,
                 // Do not process any other messages, but do loop back
                 _ => true,
       
