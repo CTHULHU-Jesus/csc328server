@@ -1,4 +1,4 @@
-use std::str::{FromStr};
+use std::str::{FromStr,from_utf8};
 use std::string::ToString;
 use regex::Regex;
 use lazy_static::*;
@@ -9,6 +9,149 @@ use std::time::Duration;
 use std::fs::File;
 use chrono::Utc;
 use std::path::Path;
+extern crate libc;
+use libc::*;
+
+#[derive(Clone,PartialEq,Eq)]
+pub enum Message {
+    HELLO,
+    NICK(String),
+    BYE,
+    READY,
+    RETRY,
+    CHAT(String),
+}
+
+
+impl FromStr for Message {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        const ERR : &str = "could not parse message from user";
+        lazy_static!{
+            static ref HELLO : Regex = Regex::new(r"HELLO").unwrap();
+            static ref NICK  : Regex = Regex::new(r"NICK*").unwrap();
+            static ref BYE   : Regex = Regex::new(r"BYE").unwrap();
+            static ref READY : Regex = Regex::new(r"READY").unwrap();
+            static ref RETRY : Regex = Regex::new(r"RETRY").unwrap();
+            static ref CHAT  : Regex = Regex::new(r"CHAT*").unwrap();
+        }
+        match s {
+            _ if HELLO.is_match(s) => Ok(Message::HELLO),
+            _ if NICK.is_match(s)  => {
+                let mut mut_s = s.to_string();
+                mut_s.replace_range(..4,"");
+                Ok(Message::NICK(mut_s))
+            }
+            _ if BYE.is_match(s)   => Ok(Message::BYE),
+            _ if READY.is_match(s) => Ok(Message::READY),
+            _ if RETRY.is_match(s) => Ok(Message::RETRY),
+            _ if CHAT.is_match(s)  => {
+                let mut mut_s = s.to_string();
+                mut_s.replace_range(..4,"");
+                Ok(Message::CHAT(mut_s))
+            }
+            _ => Err(ERR), 
+
+        }
+    }
+}
+
+impl ToString for Message {
+    fn to_string(&self) -> String {
+        match self {
+            Message::HELLO => "HELLO".to_string(),
+            Message::NICK(n) => format!("NICK{}",n),
+            Message::BYE     => "BYE".to_string(),
+            Message::READY   => "READY".to_string(),
+            Message::RETRY   => "RETRY".to_string(),
+            Message::CHAT(m) => format!("CHAT{}",m),
+        }
+    }
+}
+
+// Library Bindings
+
+// This is a reproduction of messageInfo in the library
+#[repr(C)]
+struct messageInfo {
+    protocol : c_int,
+    name : [c_char; 32],
+    msg : [c_char; 1024],
+    size : c_int,
+    msg_size : c_int,
+    name_size : c_int,
+} 
+// here's the actual bindings to library functions
+#[link(name = "libcs", kind = "static")]
+extern "C" {
+    fn sendMessage(sockfd : c_int,
+                   proto : c_int,
+                   name : *mut c_char,
+                   message : *mut c_char,
+                   nameSize : c_int,
+                   messageSize : c_int) -> c_int;
+    fn receiveMessage(sockfd : c_int,
+                      buf : *mut c_void,
+                      size: c_int) -> c_int;
+    fn getInfo(msgStruct : *mut messageInfo,
+               buffer : *mut c_char) -> c_int;
+}
+// and now functions to make them easier to use
+pub fn send_message(stream : &mut TcpStream, msg : Message) {
+    let proto : c_int;
+    let mut string : Option<String> = None;
+    let mut name = false;
+    match msg {
+        Message::HELLO   => proto = 0,
+        Message::BYE     => proto = 1,
+        Message::NICK(s) => {proto = 2;
+                             string = Some(s);
+                             name = true;}
+        Message::READY   => proto = 3,
+        Message::RETRY   => proto = 4,
+        Message::CHAT(s) => {proto = 5;
+                             string = Some(s);}
+    }
+    let mut message : *mut c_char;
+    let mut message_size : c_int;
+    match string {
+        Some(s) => {message = s.as_mut_str().as_mut_ptr() as *mut i8;
+                    message_size = s.len() as c_int;}
+        None    => {message = 0 as *mut i8;
+                    message_size = 0;}
+    }
+    if name {// Sending a nickname
+        if sendMessage(stream.as_raw_fd(), proto, message, 0 as *mut i8, message_size, 0) == -1 {
+            println!("Error occured sending the message!");
+        }
+    } else {// Sending anything other than a nickname
+        if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
+            println!("Error occured sending the message!");
+        }
+    }
+}
+pub fn rcv_message(stream : &mut TcpStream, msg : &mut Message) {
+    let mut buf : *mut c_void;
+    let mut msg_info : *mut messageInfo;
+    let bytes_read = receiveMessage(stream.as_raw_fd(), buf, 1024 as c_int); 
+    if bytes_read == -1 {
+        println!("Error receiving message!");
+    } else {
+        if getInfo(msg_info, buf.cast::<c_char>()) == -1 {println!("Error interpreting message!");}
+        unsafe { //I sure do love dealing with pointers :S
+            let info : messageInfo = *msg_info;
+            msg = match info.protocol {
+                0 => &mut Message::HELLO,
+                1 => &mut Message::BYE,
+                2 => &mut Message::NICK(from_utf8(info.name).expect("Error: Bad nickname string!").trim_end().to_string() ),
+                3 => &mut Message::READY,
+                4 => &mut Message::RETRY,
+                5 => &mut Message::CHAT(from_utf8(info.msg).expect("Error: Bad nickname string!").trim_end().to_string() ),
+            }
+        }
+    }
+}
 
 
 /// Removes all dead connections from a vector
@@ -140,63 +283,7 @@ pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>
     None
 }
 
-#[derive(Clone,PartialEq,Eq)]
-pub enum Message {
-    HELLO,
-    NICK(String),
-    BYE,
-    READY,
-    RETRY,
-    CHAT(String),
-}
 
-
-impl FromStr for Message {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        const ERR : &str = "could not parse message from user";
-        lazy_static!{
-            static ref HELLO : Regex = Regex::new(r"HELLO").unwrap();
-            static ref NICK  : Regex = Regex::new(r"NICK*").unwrap();
-            static ref BYE   : Regex = Regex::new(r"BYE").unwrap();
-            static ref READY : Regex = Regex::new(r"READY").unwrap();
-            static ref RETRY : Regex = Regex::new(r"RETRY").unwrap();
-            static ref CHAT  : Regex = Regex::new(r"CHAT*").unwrap();
-        }
-        match s {
-            _ if HELLO.is_match(s) => Ok(Message::HELLO),
-            _ if NICK.is_match(s)  => {
-                let mut mut_s = s.to_string();
-                mut_s.replace_range(..4,"");
-                Ok(Message::NICK(mut_s))
-            }
-            _ if BYE.is_match(s)   => Ok(Message::BYE),
-            _ if READY.is_match(s) => Ok(Message::READY),
-            _ if RETRY.is_match(s) => Ok(Message::RETRY),
-            _ if CHAT.is_match(s)  => {
-                let mut mut_s = s.to_string();
-                mut_s.replace_range(..4,"");
-                Ok(Message::CHAT(mut_s))
-            }
-            _ => Err(ERR), 
-
-        }
-    }
-}
-
-impl ToString for Message {
-    fn to_string(&self) -> String {
-        match self {
-            Message::HELLO => "HELLO".to_string(),
-            Message::NICK(n) => format!("NICK{}",n),
-            Message::BYE     => "BYE".to_string(),
-            Message::READY   => "READY".to_string(),
-            Message::RETRY   => "RETRY".to_string(),
-            Message::CHAT(m) => format!("CHAT{}",m),
-        }
-    }
-}
 
 /// tests to_sting and from_str for the Message type
 pub fn test_message() -> () {
