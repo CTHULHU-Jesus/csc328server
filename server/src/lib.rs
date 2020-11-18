@@ -150,7 +150,12 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
             }
         } else {// Sending anything other than a nickname
             match nickname {
-                Some(s) => {if sendMessage(stream.as_raw_fd(), proto, s.as_bytes() as *mut _ as *mut c_char, message, s.len(), message_size) == -1 {
+                Some(s) => {let ref mut nick_ar : [i8; NAME_MAX_SIZE] = [0; NAME_MAX_SIZE];
+                            let s_as_bytes = s.as_bytes();
+                            for x in 0..s.len() {
+                                nick_ar[x] = s_as_bytes[x] as i8;
+                            }
+                            if sendMessage(stream.as_raw_fd(), proto, &nick_ar[0], message, s.len() as i32, message_size) == -1 {
                                 None
                             } else {
                                 Some(())
@@ -253,7 +258,7 @@ pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, mess
     for connection in conns {
         if connection.peer_addr().unwrap_or(*me) != *me {
             let message = Message::CHAT(format!("{}:{}",nick,message));
-            send_message(&mut connection.try_clone().unwrap(), message, Some(message));
+            send_message(&mut connection.try_clone().unwrap(), message, Some(*nick));
         }
     };
 }
