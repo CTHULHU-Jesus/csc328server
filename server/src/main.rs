@@ -53,7 +53,7 @@ fn main() {
             (*connections.lock().unwrap()).push(stream.try_clone().unwrap());
 
             // Send HELLO Message 
-            send_message(&mut stream,Message::HELLO);
+            send_message(&mut stream,Message::HELLO, None);
             // stream.write(&Message::HELLO.to_string().as_bytes()).unwrap();
             log(&format!("Start connection with {}",conn_name));
 

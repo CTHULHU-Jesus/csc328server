@@ -118,7 +118,7 @@ extern "C" {
 /// stream: The stream to send a message to
 /// msg: The message to send
 /// returns () on success and None on failure
-pub fn send_message(stream : &mut TcpStream, msg : Message) -> Option<()> {
+pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<String>) -> Option<()> {
     let proto : c_int;
     let mut string : Option<String> = None;
     let mut name = false;
@@ -149,11 +149,19 @@ pub fn send_message(stream : &mut TcpStream, msg : Message) -> Option<()> {
                 Some(())
             }
         } else {// Sending anything other than a nickname
-            if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
-                None
-            } else {
-                Some(())
+            match nickname {
+                Some(s) => {if sendMessage(stream.as_raw_fd(), proto, s.as_bytes() as *mut _ as *mut c_char, message, s.len(), message_size) == -1 {
+                                None
+                            } else {
+                                Some(())
+                            }}
+                None    => {if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
+                                None
+                            } else {
+                                Some(())
+                            }}
             }
+            
         }
     }
 }
@@ -245,7 +253,7 @@ pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, mess
     for connection in conns {
         if connection.peer_addr().unwrap_or(*me) != *me {
             let message = Message::CHAT(format!("{}:{}",nick,message));
-            send_message(&mut connection.try_clone().unwrap(),message);
+            send_message(&mut connection.try_clone().unwrap(), message, Some(message));
         }
     };
 }
@@ -281,13 +289,13 @@ pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>
                     // use and then return the nick
                     if !nicknames.lock().ok()?.contains(&n.clone()) {
                         nicknames.lock().ok()?.push(n.clone());
-                        send_message(stream, Message::READY);
+                        send_message(stream, Message::READY, None);
                         // stream.write(Message::READY.to_string().as_bytes()).ok()?;
                         return Some(n);
                     } else {
                         // else ask the client to retry
                         // stream.write(Message::RETRY.to_string().as_bytes()).ok()?;
-                        send_message(stream, Message::RETRY);
+                        send_message(stream, Message::RETRY, None);
                         true
                     }
                 }
