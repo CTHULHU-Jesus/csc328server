@@ -86,7 +86,6 @@ struct messageInfo {
     protocol : c_int,
     name : [c_uchar; NAME_MAX_SIZE],
     msg : [c_uchar; MESSAGE_MAX_SIZE],
-    size : c_int,
     msg_size : c_int,
     name_size : c_int,
 } 
@@ -96,7 +95,6 @@ const MESSAGEINFOINIT : messageInfo =
     protocol : 0,
     name : [0;NAME_MAX_SIZE],
     msg : [0;MESSAGE_MAX_SIZE],
-    size : 0,
     msg_size : 0,
     name_size : 0,
 };
