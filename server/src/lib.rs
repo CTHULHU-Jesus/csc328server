@@ -101,17 +101,9 @@ const MESSAGEINFOINIT : messageInfo =
 // here's the actual bindings to library functions
 #[link(name = "cs", kind = "static")]
 extern "C" {
-    fn sendMessage(sockfd : c_int,
-                   proto : c_int,
-                   name : *mut c_char,
-                   message : *mut c_char,
-                   nameSize : c_int,
-                   messageSize : c_int) -> c_int;
-    fn receiveMessage(sockfd : c_int,
-                      buf : *mut c_void,
-                      size: c_int) -> c_int;
-    fn getInfo(msgStruct : *mut messageInfo,
-               buffer : *mut c_char) -> c_int;
+    fn sendMessage(sockfd : c_int,proto : c_int,name : *mut c_char,message : *mut c_char,nameSize : c_int,messageSize : c_int) -> c_int;
+    fn receiveMessage(sockfd : c_int,buf : *mut c_void,size: c_int) -> c_int;
+    fn getInfo(msgStruct : *mut messageInfo,buffer : *mut c_char) -> c_int;
 }
 // and now functions to make them easier to use
 /// Sends a message to a client
@@ -133,17 +125,24 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
         Message::CHAT(s) => {proto = 5;
                              string = Some(s);}
     }
-    let message : *mut c_char;
-    let message_size : c_int;
-    match string {
-        Some(s) => {message = s.clone().as_mut_str().as_mut_ptr() as *mut i8;
-                    message_size = s.len() as c_int;}
-        None    => {message = 0 as *mut i8;
-                    message_size = 0;}
+    let mut message = [0 as i8; MESSAGE_MAX_SIZE];
+    fn min(a : usize, b : usize) -> usize {
+        if a < b 
+            {a}
+        else 
+            {b}
+    };
+    match string.clone() {
+        Some(s) => {for i in 0..min(MESSAGE_MAX_SIZE,s.as_bytes().len()) {
+            message[i] = s.as_bytes()[i] as i8;
+        };}
+                    
+        None    => (),
     }
+    // fn sendMessage(sockfd : c_int,proto : c_int,name : *mut c_char,message : *mut c_char,nameSize : c_int,messageSize : c_int) -> c_int;
     unsafe {
         if name {// Sending a nickname
-            if sendMessage(stream.as_raw_fd(), proto, message, 0 as *mut i8, message_size, 0) == -1 {
+            if sendMessage(stream.as_raw_fd(), proto, &mut message[0], 0 as *mut i8, NAME_MAX_SIZE as i32, 0) == -1 {
                 None
             } else {
                 Some(())
@@ -151,16 +150,15 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
         } else {// Sending anything other than a nickname
             match nickname {
                 Some(s) => {let ref mut nick_ar : [i8; NAME_MAX_SIZE] = [0; NAME_MAX_SIZE];
-                            let s_as_bytes = s.as_bytes();
                             for x in 0..s.len() {
-                                nick_ar[x] = s_as_bytes[x] as i8;
+                                nick_ar[x] = s.as_bytes()[x] as i8;
                             }
-                            if sendMessage(stream.as_raw_fd(), proto, &mut nick_ar[0], message, s.len() as i32, message_size) == -1 {
+                            if sendMessage(stream.as_raw_fd(), proto, &mut nick_ar[0], &mut message[0], NAME_MAX_SIZE as i32, MESSAGE_MAX_SIZE as i32) == -1 {
                                 None
                             } else {
                                 Some(())
                             }}
-                None    => {if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, message, 0, message_size) == -1 {
+                None    => {if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, &mut message[0], 0, MESSAGE_MAX_SIZE as i32) == -1 {
                                 None
                             } else {
                                 Some(())
@@ -217,9 +215,10 @@ pub fn disconnect_all_connections(conns : &Vec<TcpStream>) {
     let conns : Vec<TcpStream>  = conns.iter().filter_map( |x| x.try_clone().ok()).collect();
     println!("\nDisconnecting from all connections and closeing");
     for conn in conns {
-        let conn = Box::new(conn);
+        let mut conn = Box::new(conn);
         std::thread::spawn( move || {
             //@TODO tell client to shutdown
+            send_message(&mut conn,Message::BYE,None);
             conn.shutdown(Shutdown::Both).unwrap_or(());
         });
     };
@@ -257,7 +256,7 @@ pub fn remove_nickname(nicknames : &mut Vec<String>, to_remove : &String) {
 pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message : &String) -> () {
     for connection in conns {
         if connection.peer_addr().unwrap_or(*me) != *me {
-            let message = Message::CHAT(format!("{}:{}",nick,message));
+            let message = Message::CHAT(message.clone());
             send_message(&mut connection.try_clone().unwrap(), message, Some(nick.clone()));
         }
     };
@@ -268,7 +267,7 @@ pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, mess
 pub fn log(log_message : &String) {
     let log_message = format!("{}\t{}\n",Utc::now(),log_message);
     let log_file_name : &Path = Path::new("logfile.log");
-    println!("{}",log_message);
+    print!("{}",log_message);
     match std::fs::OpenOptions::new()
         .append(true)
         .open(log_file_name) {

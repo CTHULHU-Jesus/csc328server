@@ -28,7 +28,6 @@ fn main() {
         }).expect("Error seting Ctrl-C handler");
     }
     // set up thread to clean mutex every so often
-    // @TODO see if needed
     {
         let connections = connections.clone();
         const SLEEP_CLEAN_TIME : Duration = Duration::from_secs(5*60); // 5 minutes 
@@ -54,7 +53,6 @@ fn main() {
 
             // Send HELLO Message 
             send_message(&mut stream,Message::HELLO, None);
-            // stream.write(&Message::HELLO.to_string().as_bytes()).unwrap();
             log(&format!("Start connection with {}",conn_name));
 
             // Handle Nick Message
@@ -85,35 +83,7 @@ fn main() {
                 _ => true,
       
             } {}
-//            let mut message = [0u8;MESSAGE_MAX_SIZE];
-//            while match stream.read(&mut message) {
-//                Ok(size) => {
-//                    let message : Message =
-//                        std::str::FromStr::from_str(
-//                        std::str::from_utf8(&message[0..size])
-//                        .unwrap_or(""))
-//                        .unwrap_or(Message::BYE);
-//                    match message {
-//                        // On CHAT blast it out to all connected users
-//                        Message::CHAT(x) => {
-//                            blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
-//                            log(&format!("{}@{}:`{}`",nick,conn_name,x));
-//                            true
-//                        }
-//                        // on BYE exit loop
-//                        Message::BYE => false,
-//                        // Do not process any other messages, but do loop back
-//                        _ => true,
-//                    }
-//                },
-//                // On Error do nothing but loop back
-//                // @TODO decide whether or not to just exit from the program
-//                Err(_) => true,
-//            } {
-//                // clears buffer
-//                message = [0;MESSAGE_MAX_SIZE];
-//            };
-//
+            
             //End
             log(&format!("Ending connection with {}@{}",nick,conn_name));
             //remove nickname from list of nicknames in use nicknames
