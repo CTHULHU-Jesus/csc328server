@@ -1,3 +1,12 @@
+//   Authors:         Matthew Bartlett             & Arron ??
+//   Major:          (Software Development & Math) & (Software Development)
+//   Creation Date:  October  27, 2020
+//   Due Date:       November 24, 2020
+//   Course:         CSC328
+//   Professor Name: Dr. Frye
+//   Assignment:     
+//   Filename:       main.rs
+//   Purpose:        Use commands documented in lib.rs to make a chat server
 mod lib;
 use std::net::*;
 use std::sync::*;
@@ -6,9 +15,10 @@ use std::time::Duration;
 
 
 fn main() {
-    // start listening for connections
+    // Manage the command line args
     const USAGE : &str = "cargo run [port number]";
     let portnumber = std::env::args().nth(1).unwrap_or("1337".to_string()).parse::<u32>().expect(USAGE); //1337,8008,42069
+    // start listening for connections
     let listener = TcpListener::bind(format!("0.0.0.0:{}",portnumber)).expect("Could not bind to desired port number");
     let connections : Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
     let nicknames : Arc<Mutex<Vec<String>>>   = Arc::new(Mutex::new(Vec::new()));
@@ -72,7 +82,6 @@ fn main() {
                 // On CHAT blast it out to all connected users
                 Some(Message::CHAT(x)) => {
                     blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
-                    log(&format!("{}@{}:`{}`",nick,conn_name,x));
                     true
                 }
                 // on BYE exit loop

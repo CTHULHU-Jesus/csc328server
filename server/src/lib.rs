@@ -1,3 +1,12 @@
+//   Authors:         Matthew Bartlett             & Arron ??
+//   Major:          (Software Development & Math) & (Software Development)
+//   Creation Date:  October  27, 2020
+//   Due Date:       November 24, 2020
+//   Course:         CSC328
+//   Professor Name: Dr. Frye
+//   Assignment:     
+//   Filename:       main.rs
+//   Purpose:        Create and document functions to be used to create a chat server
 use std::str::{FromStr,from_utf8};
 use std::string::ToString;
 use regex::Regex;
@@ -255,7 +264,9 @@ pub fn remove_nickname(nicknames : &mut Vec<String>, to_remove : &String) {
 /// message : The message being sent.
 pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message : &String) -> () {
     for connection in conns {
-        if connection.peer_addr().unwrap_or(*me) != *me {
+        let addr = connection.peer_addr().unwrap_or(*me);
+        if addr != *me {
+            log(&format!("{}@{}:`{}` -> {}",nick,me,message,addr));
             let message = Message::CHAT(message.clone());
             send_message(&mut connection.try_clone().unwrap(), message, Some(nick.clone()));
         }
