@@ -166,12 +166,16 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
                             for x in 0..s.len() {
                                 nick_ar[x] = s.as_bytes()[x] as i8;
                             }
-                            if sendMessage(stream.as_raw_fd(), proto, &mut nick_ar[0], &mut message[0], NAME_MAX_SIZE as i32, MESSAGE_MAX_SIZE as i32) == -1 {
+                            if sendMessage(stream.as_raw_fd(), proto, 
+                                &mut nick_ar[0], &mut message[0], 
+                                min(NAME_MAX_SIZE,s.len()) as i32, MESSAGE_MAX_SIZE as i32) == -1 {
                                 None
                             } else {
                                 Some(())
                             }}
-                None    => {if sendMessage(stream.as_raw_fd(), proto, 0 as *mut i8, &mut message[0], 0, MESSAGE_MAX_SIZE as i32) == -1 {
+                None    => {if sendMessage(stream.as_raw_fd(), proto, 
+                                0 as *mut i8, &mut message[0], 0, 
+                                min(MESSAGE_MAX_SIZE,string.unwrap_or("".to_string()).len()) as i32) == -1 {
                                 None
                             } else {
                                 Some(())
@@ -230,7 +234,7 @@ pub fn disconnect_all_connections(conns : &Vec<TcpStream>) {
     for conn in conns {
         let mut conn = Box::new(conn);
         std::thread::spawn( move || {
-            //@TODO tell client to shutdown
+            log(&format!("disconnecting from {:?}",conn.peer_addr()));
             send_message(&mut conn,Message::BYE,None);
             conn.shutdown(Shutdown::Both).unwrap_or(());
         });
