@@ -7,10 +7,8 @@
 //   Assignment:     
 //   Filename:       main.rs
 //   Purpose:        Create and document functions to be used to create a chat server
-use std::str::{FromStr,from_utf8};
+use std::str::from_utf8;
 use std::string::ToString;
-use regex::Regex;
-use lazy_static::*;
 use std::net::*;
 use std::sync::*;
 use std::io::Write;
@@ -38,41 +36,7 @@ pub enum Message {
     CHAT(String),
 }
 
-
-impl FromStr for Message {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        const ERR : &str = "could not parse message from user";
-        lazy_static!{
-            static ref HELLO : Regex = Regex::new(r"HELLO").unwrap();
-            static ref NICK  : Regex = Regex::new(r"NICK*").unwrap();
-            static ref BYE   : Regex = Regex::new(r"BYE").unwrap();
-            static ref READY : Regex = Regex::new(r"READY").unwrap();
-            static ref RETRY : Regex = Regex::new(r"RETRY").unwrap();
-            static ref CHAT  : Regex = Regex::new(r"CHAT*").unwrap();
-        }
-        match s {
-            _ if HELLO.is_match(s) => Ok(Message::HELLO),
-            _ if NICK.is_match(s)  => {
-                let mut mut_s = s.to_string();
-                mut_s.replace_range(..4,"");
-                Ok(Message::NICK(mut_s))
-            }
-            _ if BYE.is_match(s)   => Ok(Message::BYE),
-            _ if READY.is_match(s) => Ok(Message::READY),
-            _ if RETRY.is_match(s) => Ok(Message::RETRY),
-            _ if CHAT.is_match(s)  => {
-                let mut mut_s = s.to_string();
-                mut_s.replace_range(..4,"");
-                Ok(Message::CHAT(mut_s))
-            }
-            _ => Err(ERR), 
-
-        }
-    }
-}
-
+/// Implements the to_string method for Message, ONLY TO BE USED FOR LOGGING.
 impl ToString for Message {
     fn to_string(&self) -> String {
         match self {
@@ -88,7 +52,7 @@ impl ToString for Message {
 
 // Library Bindings
 
-// This is a reproduction of messageInfo in the library
+/// This is a reproduction of the C-struct messageInfo in the C library
 #[derive(Clone,PartialEq,Eq)]
 #[repr(C)]
 struct messageInfo {
@@ -98,7 +62,8 @@ struct messageInfo {
     msg_size : c_int,
     name_size : c_int,
 } 
-// This is initial state for messageInfo types because we have to initialize them before we pass them
+
+/// This is initial state for messageInfo types because we have to initialize them before we pass them
 const MESSAGEINFOINIT : messageInfo =
     messageInfo{
     protocol : 0,
@@ -107,12 +72,51 @@ const MESSAGEINFOINIT : messageInfo =
     msg_size : 0,
     name_size : 0,
 };
+
 // here's the actual bindings to library functions
 #[link(name = "cs", kind = "static")]
 extern "C" {
-    fn sendMessage(sockfd : c_int,proto : c_int,name : *mut c_char,message : *mut c_char,nameSize : c_int,messageSize : c_int) -> c_int;
-    fn receiveMessage(sockfd : c_int,buf : *mut c_void,size: c_int) -> c_int;
-    fn getInfo(msgStruct : *mut messageInfo,buffer : *mut c_char) -> c_int;
+    /// Send a correctly formated message.
+    /// socfd: The file descriptor for the socket.
+    /// proto: The number of the protocol
+    ///     0 -> HELLO
+    ///     1 -> BYE
+    ///     2 -> NICK
+    ///     3 -> READY
+    ///     4 -> RETRY
+    ///     5 -> CHAT
+    /// name: C-string that is the name of the person sending a CHAT otherwise 0.
+    /// message: C-string that is the message of a CHAT or the Name portion of a NICK message
+    /// otherwise 0.
+    /// nameSizeL: NAME_MAX_SIZE for CHAT messages otherwise 0.
+    /// messageSize: MESSAGE_MAX_SIZE for CHAT messages NAME_MAX_SIZE for NICK messages otherwise
+    /// 0.
+    /// returns -1 if there was an error, otherwise the number of bytes sent.
+    fn sendMessage(
+        sockfd : c_int,
+        proto : c_int,
+        name : *mut c_char,
+        message : *mut c_char,
+        nameSize : c_int,
+        messageSize : c_int) -> c_int;
+    
+    /// Receives a correctly formated message.
+    /// socfd: The file descriptor for the socket.
+    /// buf: The buffer for the message.
+    /// size: The max size of the buffer.
+    /// returns -1 if there was an error, otherwise the number of bytes read.
+    fn receiveMessage(
+        sockfd : c_int,
+        buf : *mut c_void,
+        size: c_int) -> c_int;
+    
+    /// Parses a received message.
+    /// msgStruct: The message struct to be filled with info from the buffer.
+    /// buffer: The received message buffer.
+    /// returns -1 if there was an error, otherwise 0
+    fn getInfo(
+        msgStruct : *mut messageInfo,
+        buffer : *mut c_char) -> c_int;
 }
 // and now functions to make them easier to use
 /// Sends a message to a client
@@ -321,35 +325,3 @@ pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>
     };
     None
 }
-
-
-
-/// tests to_sting and from_str for the Message type
-pub fn test_message() -> () {
-    // test HELLO,
-    println!("test HELLO to_string '{}'",Message::HELLO.to_string());
-    let hello_str : &str = "HELLO";
-    println!("test HELLO from_str '{}' -> '{}'", hello_str, Message::from_str(hello_str).unwrap().to_string());
-    // test NICK(String),
-    println!("test NICK to_string '{}'",Message::NICK("name".to_string()).to_string());
-    let nick_str : &str = "NICKname";
-    println!("test NICK from_str '{}' -> '{}'", nick_str, Message::from_str(nick_str).unwrap().to_string());
-    // test BYE,
-    println!("test BYE to_string '{}'",Message::BYE.to_string());
-    let bye_str : &str = "BYE";
-    println!("test BYE from_str '{}' -> '{}'", bye_str, Message::from_str(bye_str).unwrap().to_string());
-    // test READY,
-    println!("test READY to_string '{}'",Message::READY.to_string());
-    let ready_str : &str = "READY";
-    println!("test READY from_str '{}' -> '{}'", ready_str, Message::from_str(ready_str).unwrap().to_string());
-    // test RETRY,
-    println!("test RETRY to_string '{}'",Message::RETRY.to_string());
-    let retry_str : &str = "RETRY";
-    println!("test RETRY from_str '{}' -> '{}'", retry_str, Message::from_str(retry_str).unwrap().to_string());
-    // test CHAT(String),
-    println!("test CHAT to_string '{}'",Message::CHAT("words words".to_string()).to_string());
-    let chat_str : &str = "CHATwords words";
-    println!("test CHAT from_str '{}' -> '{}'", chat_str, Message::from_str(chat_str).unwrap().to_string());
- 
-}
-
