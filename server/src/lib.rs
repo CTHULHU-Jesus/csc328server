@@ -168,14 +168,14 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
                             }
                             if sendMessage(stream.as_raw_fd(), proto, 
                                 &mut nick_ar[0], &mut message[0], 
-                                min(NAME_MAX_SIZE,s.len()) as i32, MESSAGE_MAX_SIZE as i32) == -1 {
+                                NAME_MAX_SIZE as i32, MESSAGE_MAX_SIZE as i32) == -1 {
                                 None
                             } else {
                                 Some(())
                             }}
                 None    => {if sendMessage(stream.as_raw_fd(), proto, 
                                 0 as *mut i8, &mut message[0], 0, 
-                                min(MESSAGE_MAX_SIZE,string.unwrap_or("".to_string()).len()) as i32) == -1 {
+                                MESSAGE_MAX_SIZE as i32) == -1 {
                                 None
                             } else {
                                 Some(())
