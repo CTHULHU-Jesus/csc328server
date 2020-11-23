@@ -85,9 +85,9 @@ extern "C" {
     ///     3 -> READY
     ///     4 -> RETRY
     ///     5 -> CHAT
-    /// name: C-string that is the name of the person sending a CHAT otherwise 0.
-    /// message: C-string that is the message of a CHAT or the Name portion of a NICK message
-    /// otherwise 0.
+    /// name: C-string that is the name of the person sending a CHAT or the Name portion of a
+    /// NICK message otherwise 0.
+    /// message: C-string that is the message of a CHAT otherwise 0.
     /// nameSizeL: NAME_MAX_SIZE for CHAT messages otherwise 0.
     /// messageSize: MESSAGE_MAX_SIZE for CHAT messages NAME_MAX_SIZE for NICK messages otherwise
     /// 0.
