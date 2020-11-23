@@ -1,10 +1,10 @@
-//   Authors:         Matthew Bartlett             & Arron ??
+//   Authors:        Matthew Bartlett              & Arron Harman
 //   Major:          (Software Development & Math) & (Software Development)
 //   Creation Date:  October  27, 2020
 //   Due Date:       November 24, 2020
 //   Course:         CSC328
 //   Professor Name: Dr. Frye
-//   Assignment:     
+//   Assignment:     Chat Server
 //   Filename:       main.rs
 //   Purpose:        Create and document functions to be used to create a chat server
 use std::str::from_utf8;
@@ -215,8 +215,8 @@ pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
 /// Removes all dead connections from a vector
 /// conns : The list of active connections
 /// Returns a vector of all active connections
-pub fn remove_dead_connections(conns : &Vec<TcpStream>) -> Vec<TcpStream> {
-    conns.into_iter().filter_map( |x| {
+pub fn remove_dead_connections(conns : &Vec<(TcpStream,String)>) -> Vec<TcpStream> {
+    conns.into_iter().filter_map( |(x,_)| {
         match x.take_error() {
             Err(_) => None,
             Ok(Some(_)) => None,
@@ -227,14 +227,19 @@ pub fn remove_dead_connections(conns : &Vec<TcpStream>) -> Vec<TcpStream> {
 
 /// Dissconnects from all active connections, waits 5 seconds and then ends
 /// conns : The active connections
-pub fn disconnect_all_connections(conns : &Vec<TcpStream>) {
+pub fn disconnect_all_connections(conns : &Vec<(TcpStream,String)>) {
     const TIMEOUT_TIMER : Duration = Duration::from_secs(5);
-    let conns : Vec<TcpStream>  = conns.iter().filter_map( |x| x.try_clone().ok()).collect();
+    let conns : Vec<(TcpStream,String)>  = conns.iter().filter_map( |(x,y)| {
+        match x.try_clone().ok() {
+            Some(x) => Some((x,y.clone())),
+            None    => None,
+        }
+    }).collect();
     println!("\nDisconnecting from all connections and closeing");
-    for conn in conns {
+    for (conn, name) in conns {
         let mut conn = Box::new(conn);
         std::thread::spawn( move || {
-            log(&format!("disconnecting from {:?}",conn.peer_addr()));
+            log(&format!("disconnecting from {}@{:?}",name,conn.peer_addr()));
             send_message(&mut conn,Message::BYE,None);
             conn.shutdown(Shutdown::Both).unwrap_or(());
         });
@@ -245,23 +250,12 @@ pub fn disconnect_all_connections(conns : &Vec<TcpStream>) {
 /// Removes a connection from a list of connections
 /// conns : The active connections
 /// to_remove : The connection to remove
-pub fn remove_connection(conns : &mut Vec<TcpStream>, to_remove : &TcpStream) {
+pub fn remove_connection(conns : &mut Vec<(TcpStream,String)>, to_remove : &TcpStream) {
     let peer = to_remove.peer_addr().unwrap();
     *conns = conns
         .into_iter()
-        .filter(|x| x.peer_addr().unwrap() != peer)
-        .map(|x| x.try_clone().unwrap()).collect::<Vec<_>>();
-}
-
-/// Removes a nickname from the list of active nicknames
-/// nicknames : The list of active nicknames
-/// to_remove : The nickname to be removed
-pub fn remove_nickname(nicknames : &mut Vec<String>, to_remove : &String) {
-    *nicknames = nicknames
-        .into_iter()
-        .filter( |x| **x != *to_remove )
-        .map( |x| x.clone())
-        .collect();
+        .filter(|(x,_)| x.peer_addr().unwrap() != peer)
+        .map(|(x,y)| (x.try_clone().unwrap(),y.clone())).collect::<Vec<_>>();
 }
 
 
@@ -270,11 +264,11 @@ pub fn remove_nickname(nicknames : &mut Vec<String>, to_remove : &String) {
 /// me    : The address of the user sending the message.
 /// nick  : The nickname of the user sending the message.
 /// message : The message being sent.
-pub fn blast_out(conns : &Vec<TcpStream>, me : &SocketAddr, nick : &String, message : &String) -> () {
-    for connection in conns {
+pub fn blast_out(conns : &Vec<(TcpStream,String)>, me : &SocketAddr, nick : &String, message : &String) -> () {
+    for (connection,name) in conns {
         let addr = connection.peer_addr().unwrap_or(*me);
         if addr != *me {
-            log(&format!("{}@{}:`{}` -> {}",nick,me,message,addr));
+            log(&format!("{}@{}:`{}` -> {}@{}",nick,me,message,name,addr));
             let message = Message::CHAT(message.clone());
             send_message(&mut connection.try_clone().unwrap(), message, Some(nick.clone()));
         }
@@ -305,13 +299,16 @@ pub fn log(log_message : &String) {
 /// stream : the tcpstream connected to the user
 /// nicknames : the global list of all nicknames
 /// returns : a valid nickname or None if the user wants to end the connection or an error occurred
-pub fn get_nickname(stream : &mut TcpStream, nicknames : &Arc<Mutex<Vec<String>>>) -> Option<String> {
+pub fn get_nickname(stream : &mut TcpStream, conns : &Arc<Mutex<Vec<(TcpStream,String)>>>) -> Option<String> {
+    fn nicknames(conns : &Arc<Mutex<Vec<(TcpStream,String)>>>) -> Option<Vec<String>> {
+        Some((*conns.lock().ok()?).iter().map( |(_,y)| y.clone()).collect())
+    }
     while match rcv_message(stream) {
                 Some(Message::NICK(n)) => {
                     // if the nickname is not taken set add it to the list of nicknames in
                     // use and then return the nick
-                    if !nicknames.lock().ok()?.contains(&n.clone()) {
-                        nicknames.lock().ok()?.push(n.clone());
+                    if !nicknames(conns)?.contains(&n.clone()) {
+                        nicknames(conns)?.push(n.clone());
                         send_message(stream, Message::READY, None);
                         // stream.write(Message::READY.to_string().as_bytes()).ok()?;
                         return Some(n);

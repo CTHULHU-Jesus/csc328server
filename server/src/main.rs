@@ -20,8 +20,7 @@ fn main() {
     let portnumber = std::env::args().nth(1).unwrap_or("1337".to_string()).parse::<u32>().expect(USAGE); //1337,8008,42069
     // start listening for connections
     let listener = TcpListener::bind(format!("0.0.0.0:{}",portnumber)).expect("Could not bind to desired port number");
-    let connections : Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
-    let nicknames : Arc<Mutex<Vec<String>>>   = Arc::new(Mutex::new(Vec::new()));
+    let connections : Arc<Mutex<Vec<(TcpStream,String)>>> = Arc::new(Mutex::new(Vec::new()));
     log(&"Server starts".to_string());
     // set up signal handler for ^C
     {
@@ -49,34 +48,33 @@ fn main() {
     for stream in listener.incoming() {
         let stream = Box::new(stream);
         let connections = connections.clone();
-        let nicknames = nicknames.clone();
         // spin up thread to handle each client
         std::thread::spawn( move || {
-            //Start
+            // add stream to mutex
+
+           //Start
             let mut stream = (*stream).unwrap();
             let conn_name = match stream.peer_addr().ok() {
                 Some(x) => {format!("{:?}",x)},
                 None    => "Err_get_addr".to_string()
             };
-
-            (*connections.lock().unwrap()).push(stream.try_clone().unwrap());
+            (*connections.lock().unwrap()).push((stream.try_clone().unwrap(),"".to_string()));
 
             // Send HELLO Message 
             send_message(&mut stream,Message::HELLO, None);
             log(&format!("Start connection with {}",conn_name));
 
             // Handle Nick Message
-            let nick : String = match get_nickname(&mut stream,&nicknames) {
+            let nick : String = match get_nickname(&mut stream,&connections) {
                 Some(s) => s,
                 None    => {
                     // None means that the client wants to disconnect
-                    remove_connection(&mut connections.lock().unwrap(),&stream);
                     stream.shutdown(Shutdown::Both).expect("Could not shutdown connection");
                     std::process::exit(0);
                 }
             };
             log(&format!("{} has the nickname `{}`",conn_name,nick));
-            
+
             // Wait for messages
             while match rcv_message(&mut stream) {
                 // On CHAT blast it out to all connected users
@@ -95,8 +93,6 @@ fn main() {
             
             //End
             log(&format!("Ending connection with {}@{}",nick,conn_name));
-            //remove nickname from list of nicknames in use nicknames
-            remove_nickname(&mut nicknames.lock().unwrap(),&nick);
             //remove connection from list of connections in use
             remove_connection(&mut connections.lock().unwrap(),&stream);
             stream.shutdown(Shutdown::Both).expect("Could not shutdown connection");
