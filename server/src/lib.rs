@@ -267,7 +267,7 @@ pub fn remove_connection(conns : &mut Vec<(TcpStream,String)>, to_remove : &TcpS
 pub fn blast_out(conns : &Vec<(TcpStream,String)>, me : &SocketAddr, nick : &String, message : &String) -> () {
     for (connection,name) in conns {
         let addr = connection.peer_addr().unwrap_or(*me);
-        if addr != *me {
+        if addr != *me && *name != "".to_string() {
             log(&format!("{}@{}:`{}` -> {}@{}",nick,me,message,name,addr));
             let message = Message::CHAT(message.clone());
             send_message(&mut connection.try_clone().unwrap(), message, Some(nick.clone()));
@@ -303,13 +303,26 @@ pub fn get_nickname(stream : &mut TcpStream, conns : &Arc<Mutex<Vec<(TcpStream,S
     fn nicknames(conns : &Arc<Mutex<Vec<(TcpStream,String)>>>) -> Option<Vec<String>> {
         Some((*conns.lock().ok()?).iter().map( |(_,y)| y.clone()).collect())
     }
+    let addr = stream.peer_addr().unwrap();
     while match rcv_message(stream) {
                 Some(Message::NICK(n)) => {
                     // if the nickname is not taken set add it to the list of nicknames in
                     // use and then return the nick
                     if !nicknames(conns)?.contains(&n.clone()) {
-                        nicknames(conns)?.push(n.clone());
-                        send_message(stream, Message::READY, None);
+                        {
+                            let n = n.clone();
+                            *(conns.lock().unwrap()) = conns.lock().unwrap().iter().filter_map(
+                                move |(x,y)| {
+                                    let x : TcpStream = (*x).try_clone().ok()?;
+                                    if x.peer_addr().ok()?== addr {
+                                                Some((x,n.clone()))
+                                            } else {
+                                                Some((x,y.clone()))
+                                            }
+                                    }
+                            ).collect();
+                            send_message(stream, Message::READY, None);
+                        }
                         // stream.write(Message::READY.to_string().as_bytes()).ok()?;
                         return Some(n);
                     } else {
