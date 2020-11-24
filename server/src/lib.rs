@@ -191,9 +191,12 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
 /// returns the message reveved
 pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
     unsafe {
-        let buf = &mut ['\0' as u8;3*4+NAME_MAX_SIZE+MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
+        // BUFF_SIZE store the max size of the buffer 3 32 bit integers and arrays of NAME_MAX_SIZE
+        // and MESSAGE_MAX_SIZE
+        const BUFF_SIZE : usize = 3*4+NAME_MAX_SIZE+MESSAGE_MAX_SIZE;
+        let buf = &mut ['\0' as u8;BUFF_SIZE] as *mut _ as *mut c_void;
         let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
-        let bytes_read = receiveMessage(stream.as_raw_fd(), buf , MESSAGE_MAX_SIZE as c_int); 
+        let bytes_read = receiveMessage(stream.as_raw_fd(), buf , BUFF_SIZE as c_int); 
         if bytes_read == -1 {
             None
         } else {
@@ -252,6 +255,7 @@ pub fn disconnect_all_connections(conns : &Vec<(TcpStream,String)>) {
 /// to_remove : The connection to remove
 pub fn remove_connection(conns : &mut Vec<(TcpStream,String)>, to_remove : &TcpStream) {
     let peer = to_remove.peer_addr().unwrap();
+    remove_dead_connections(conns);
     *conns = conns
         .into_iter()
         .filter(|(x,_)| x.peer_addr().unwrap() != peer)
