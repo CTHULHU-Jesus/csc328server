@@ -53,7 +53,7 @@ impl ToString for Message {
 // Library Bindings
 
 /// This is a reproduction of the C-struct messageInfo in the C library
-#[derive(Clone,PartialEq,Eq)]
+#[derive(Clone)]
 #[repr(C)]
 struct messageInfo {
     protocol : c_int,
