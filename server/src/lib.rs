@@ -302,7 +302,7 @@ pub fn log(log_message : &String) {
 pub fn get_nickname(stream : &mut TcpStream, conns : &Arc<Mutex<Vec<(TcpStream,String)>>>) -> Option<String> {
     fn nicknames(conns : &Arc<Mutex<Vec<(TcpStream,String)>>>) -> Option<Vec<String>> {
         Some((*conns.lock().ok()?).iter().map( |(_,y)| y.clone()).collect())
-    }
+    };
     let addr = stream.peer_addr().unwrap();
     while match rcv_message(stream) {
                 Some(Message::NICK(n)) => {

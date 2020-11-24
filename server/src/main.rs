@@ -50,15 +50,15 @@ fn main() {
         let connections = connections.clone();
         // spin up thread to handle each client
         std::thread::spawn( move || {
-            // add stream to mutex
-
-           //Start
+            //Start
             let mut stream = (*stream).unwrap();
             let conn_name = match stream.peer_addr().ok() {
                 Some(x) => {format!("{:?}",x)},
                 None    => "Err_get_addr".to_string()
             };
-            (*connections.lock().unwrap()).push((stream.try_clone().unwrap(),"".to_string()));
+
+            // add stream to mutex
+            connections.lock().unwrap().push((stream.try_clone().unwrap(),"".to_string()));
 
             // Send HELLO Message 
             send_message(&mut stream,Message::HELLO, None);
