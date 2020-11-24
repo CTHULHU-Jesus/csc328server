@@ -309,7 +309,6 @@ pub fn get_nickname(stream : &mut TcpStream, conns : &Arc<Mutex<Vec<(TcpStream,S
     };
     while match rcv_message(stream) {
                 Some(Message::NICK(n)) => {
-                    log(&format!("Wants `{}` as nickname",n));
                     // if the nickname is not taken set add it to the list of nicknames in
                     // use and then return the nick
                     if !nicknames(conns)?.contains(&n.clone()) {
