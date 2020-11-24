@@ -174,8 +174,8 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
                                 Some(())
                             }}
                 None    => {if sendMessage(stream.as_raw_fd(), proto, 
-                                0 as *mut i8, &mut message[0], 0, 
-                                MESSAGE_MAX_SIZE as i32) == -1 {
+                                0 as *mut i8, &mut message[0],
+                                0, MESSAGE_MAX_SIZE as i32) == -1 {
                                 None
                             } else {
                                 Some(())
@@ -191,9 +191,9 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
 /// returns the message reveved
 pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
     unsafe {
-        let buf : *mut c_void = &mut ['\0' as u8;MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
+        let buf = &mut ['\0' as u8;MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
         let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
-        let bytes_read = receiveMessage(stream.as_raw_fd(), buf, MESSAGE_MAX_SIZE as c_int); 
+        let bytes_read = receiveMessage(stream.as_raw_fd(), buf , MESSAGE_MAX_SIZE as c_int); 
         if bytes_read == -1 {
             None
         } else {
@@ -303,26 +303,13 @@ pub fn get_nickname(stream : &mut TcpStream, conns : &Arc<Mutex<Vec<(TcpStream,S
     fn nicknames(conns : &Arc<Mutex<Vec<(TcpStream,String)>>>) -> Option<Vec<String>> {
         Some((*conns.lock().ok()?).iter().map( |(_,y)| y.clone()).collect())
     };
-    let addr = stream.peer_addr().unwrap();
     while match rcv_message(stream) {
                 Some(Message::NICK(n)) => {
+                    log(&format!("Wants `{}` as nickname",n));
                     // if the nickname is not taken set add it to the list of nicknames in
                     // use and then return the nick
                     if !nicknames(conns)?.contains(&n.clone()) {
-                        {
-                            let n = n.clone();
-                            *(conns.lock().unwrap()) = conns.lock().unwrap().iter().filter_map(
-                                move |(x,y)| {
-                                    let x : TcpStream = (*x).try_clone().ok()?;
-                                    if x.peer_addr().ok()?== addr {
-                                                Some((x,n.clone()))
-                                            } else {
-                                                Some((x,y.clone()))
-                                            }
-                                    }
-                            ).collect();
-                            send_message(stream, Message::READY, None);
-                        }
+                        conns.lock().unwrap().push((stream.try_clone().unwrap(),n.clone()));
                         // stream.write(Message::READY.to_string().as_bytes()).ok()?;
                         return Some(n);
                     } else {
