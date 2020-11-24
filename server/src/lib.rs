@@ -138,7 +138,7 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
         Message::CHAT(s) => {proto = 5;
                              string = Some(s);}
     }
-    let mut message = [0 as i8; MESSAGE_MAX_SIZE];
+    let mut message = ['\0' as i8; MESSAGE_MAX_SIZE];
     fn min(a : usize, b : usize) -> usize {
         if a < b 
             {a}
@@ -162,7 +162,7 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
             }
         } else {// Sending anything other than a nickname
             match nickname {
-                Some(s) => {let ref mut nick_ar : [i8; NAME_MAX_SIZE] = [0; NAME_MAX_SIZE];
+                Some(s) => {let ref mut nick_ar : [i8; NAME_MAX_SIZE] = ['\0' as i8; NAME_MAX_SIZE];
                             for x in 0..s.len() {
                                 nick_ar[x] = s.as_bytes()[x] as i8;
                             }
@@ -191,7 +191,7 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
 /// returns the message reveved
 pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
     unsafe {
-        let buf : *mut c_void = &mut [0u8;MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
+        let buf : *mut c_void = &mut ['\0' as u8;MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
         let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
         let bytes_read = receiveMessage(stream.as_raw_fd(), buf, MESSAGE_MAX_SIZE as c_int); 
         if bytes_read == -1 {
