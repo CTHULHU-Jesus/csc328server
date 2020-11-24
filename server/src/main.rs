@@ -1,10 +1,10 @@
-//   Authors:         Matthew Bartlett             & Arron ??
+//   Authors:        Matthew Bartlett              & Arron Harman
 //   Major:          (Software Development & Math) & (Software Development)
 //   Creation Date:  October  27, 2020
 //   Due Date:       November 24, 2020
 //   Course:         CSC328
 //   Professor Name: Dr. Frye
-//   Assignment:     
+//   Assignment:     Chat Server
 //   Filename:       main.rs
 //   Purpose:        Use commands documented in lib.rs to make a chat server
 mod lib;
