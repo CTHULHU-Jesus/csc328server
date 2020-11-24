@@ -20,7 +20,7 @@ use libc::*;
 use std::os::unix::io::AsRawFd;
 
 /// The Max size of message
-const MESSAGE_MAX_SIZE : usize = 10;
+const MESSAGE_MAX_SIZE : usize = 1024;
 /// The Max size of a name
 const NAME_MAX_SIZE : usize = 32;
 
