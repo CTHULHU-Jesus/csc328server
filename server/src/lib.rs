@@ -20,7 +20,7 @@ use libc::*;
 use std::os::unix::io::AsRawFd;
 
 /// The Max size of message
-const MESSAGE_MAX_SIZE : usize = 1024;
+const MESSAGE_MAX_SIZE : usize = 10;
 /// The Max size of a name
 const NAME_MAX_SIZE : usize = 32;
 
@@ -191,7 +191,7 @@ pub fn send_message(stream : &mut TcpStream, msg : Message, nickname : Option<St
 /// returns the message reveved
 pub fn rcv_message(stream : &mut TcpStream) -> Option<Message> {
     unsafe {
-        let buf = &mut ['\0' as u8;MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
+        let buf = &mut ['\0' as u8;3*4+NAME_MAX_SIZE+MESSAGE_MAX_SIZE] as *mut _ as *mut c_void;
         let ref mut msg_info : messageInfo = MESSAGEINFOINIT.clone();
         let bytes_read = receiveMessage(stream.as_raw_fd(), buf , MESSAGE_MAX_SIZE as c_int); 
         if bytes_read == -1 {
