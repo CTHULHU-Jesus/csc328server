@@ -310,11 +310,10 @@ pub fn get_nickname(stream : &mut TcpStream, conns : &Arc<Mutex<Vec<(TcpStream,S
                     // use and then return the nick
                     if !nicknames(conns)?.contains(&n.clone()) {
                         conns.lock().unwrap().push((stream.try_clone().unwrap(),n.clone()));
-                        // stream.write(Message::READY.to_string().as_bytes()).ok()?;
+                        send_message(stream, Message::READY, None);
                         return Some(n);
                     } else {
                         // else ask the client to retry
-                        // stream.write(Message::RETRY.to_string().as_bytes()).ok()?;
                         send_message(stream, Message::RETRY, None);
                         true
                     }
