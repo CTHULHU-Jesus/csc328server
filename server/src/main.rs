@@ -79,6 +79,7 @@ fn main() {
             while match rcv_message(&mut stream) {
                 // On CHAT blast it out to all connected users
                 Some(Message::CHAT(x)) => {
+                    let x = x.trim().to_string().replace('\r',"");
                     log(&format!("Blast out {}@{}:`{}`",nick,conn_name,x));
                     blast_out(&connections.lock().unwrap(),&stream.peer_addr().unwrap(),&nick,&x);
                     true
