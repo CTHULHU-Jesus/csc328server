@@ -258,7 +258,11 @@ pub fn remove_connection(conns : &mut Vec<(TcpStream,String)>, to_remove : &TcpS
     remove_dead_connections(conns);
     *conns = conns
         .into_iter()
-        .filter(|(x,_)| x.peer_addr().unwrap() != peer)
+        .filter(|(x,_)| {
+            match x.peer_addr().ok() {
+                Some(x) => x != peer,
+                None    => false,
+            }})
         .map(|(x,y)| (x.try_clone().unwrap(),y.clone())).collect::<Vec<_>>();
 }
 

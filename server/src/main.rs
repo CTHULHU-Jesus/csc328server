@@ -39,7 +39,7 @@ fn main() {
     // set up thread to clean mutex every so often
     {
         let connections = connections.clone();
-        const SLEEP_CLEAN_TIME : Duration = Duration::from_secs(5*60); // 5 minutes 
+        const SLEEP_CLEAN_TIME : Duration = Duration::from_secs(60); // 1 minute
         std::thread::spawn(move || {
             std::thread::sleep(SLEEP_CLEAN_TIME);
             remove_dead_connections(&connections.lock().unwrap());
