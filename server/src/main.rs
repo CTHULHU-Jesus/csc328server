@@ -69,6 +69,7 @@ fn main() {
                 Some(s) => s,
                 None    => {
                     // None means that the client wants to disconnect
+                    log(&format!("Ending connection with {}",conn_name));
                     remove_connection(&mut connections.lock().unwrap(),&stream);
                     stream.shutdown(Shutdown::Both).expect("Could not shutdown connection");
                     return ();
