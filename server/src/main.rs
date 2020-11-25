@@ -70,7 +70,8 @@ fn main() {
                 None    => {
                     // None means that the client wants to disconnect
                     stream.shutdown(Shutdown::Both).expect("Could not shutdown connection");
-                    std::process::exit(0);
+                    remove_connection(&mut connections.lock().unwrap(),&stream);
+                    return ();
                 }
             };
             log(&format!("{} has the nickname `{}`",conn_name,nick));
